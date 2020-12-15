@@ -1,0 +1,200 @@
+#!/bin/sh
+#=======================================
+# SYNOPSIS
+#   inverted_index - find the inverted index of a page
+#
+# AUTHOR
+#   Quan Zhou
+#
+# DESCRIPTION
+#   find the inverted index of a page
+#
+# EXAMPLE
+#   See below
+#
+# RETURN VALUE
+#   Return 0 if successful
+#   Return 1 otherwise.
+#
+# FUTURE ENHANCEMENTS
+#   None
+#
+# BUGS
+#   None
+#======================================
+
+#=====================================
+#
+# online help
+#
+#=====================================
+help() {
+   echo "
+Description:
+  find the inverted index of a page
+
+Syntax:
+  inverted_index -u <start_url> -l <number_of_levels>
+
+Options:
+   -u start_url
+      The url used to find inverted index.
+   -l number_of_levels
+      How deep is the search
+
+Examples:
+    $ ./inverted_index -u a.html -l 1
+      student a.html
+
+    $ ./inverted_index -u a.html -l 2
+      student a.html a_1.html
+      My a_1.html
+      Your a_2.html
+      teacher a_2.html
+
+    $ ./inverted_index -u a.html -l 3
+      student a.html a_1.html a_1_1.html
+      My a_1.html
+      Your a_2.html
+      teacher a_2.html a_1_1.html
+      NPU a_1_1.html
+"
+   exit 0
+}
+
+
+#======================================================================
+#   main program
+#======================================================================
+typeset local_ip mode
+
+if test $# -eq 0
+then
+   help
+else
+   #string=
+   start_url=
+   number_of_levels=
+
+   while [ "$#" -ne 0 ]
+   do
+      case "$1" in
+         #-s) shift; string="$1"; shift;;
+         -u) shift; start_url="$1"; shift;;
+         -l) shift; number_of_levels="$1"; shift;;
+
+          *) echo "Error in $0: wrong option $1"; help; exit 1;;
+      esac
+   done
+fi
+
+###############################################
+#
+# Setup temporary file
+#
+###############################################
+tmpname=${0##*/}
+# if [ $(echo $tmpname | wc -c) -gt 8 ]
+# then
+#   typeset -L8 command=$tmpname
+# else
+#    command=$tmpname
+# fi
+# Keep the first 10 characters
+command=`echo "$tmpname" | sed 's/^\(..........\).*/\1/'`
+TEMPA=/tmp/${command}A$$
+TEMPB=/tmp/${command}B$$
+TEMPC=/tmp/${command}C$$
+TEMPD=/tmp/${command}D$$
+TEMPE=/tmp/${command}E$$
+TEMPF=/tmp/${command}F$$
+ALL_TEMP="$TEMPA $TEMPB $TEMPC $TEMPD $TEMPE $TEMPF"
+
+trap "/bin/rm -f $ALL_TEMP; exit 1" \
+         1 2 3 4 5 6 7 8 10 12 13 15 16 17 19 20 21
+trap "/bin/rm -f $ALL_TEMP" 0
+
+
+###############################################
+#
+# Processing
+#
+###############################################
+# TEMPC stores all the URLs need to be processed at this level
+echo "$start_url" > $TEMPC
+echo "" > 1.txt
+while true
+do
+   if [ "$number_of_levels" = 0 ]
+   then
+      break
+   fi
+
+   # TEMPD is used to store the URLs to be processed at next level
+   echo "" > $TEMPD
+
+   # TEMPC stores all the URLs need to be processed at this level
+   # Process one level
+   cat $TEMPC | while read url
+   do
+      # echo current_level: $number_of_levels
+      # echo $url
+
+      lynx -dump "$url" > $TEMPA
+      # while read line; do
+      #   for word in $line; do
+      #       first_char="$(printf '%s' "$myvar" | cut -c1)"
+      #       if [[ $first_char = '[' ]] ; then continue; else echo $word; fi
+      #
+      #   done
+      # done <$TEMPA
+      # echo "\n---------"
+      #cat $TEMPA
+      #grep -o -E '\w+' $TEMPA | sort -u
+
+      cat $TEMPA| while read line
+      do
+          first_char="$(printf '%s' "$line" | cut -c1)"
+          if [[ $first_char != '[' ]]
+          then
+            echo $line
+          else
+            break
+          fi
+      done > $TEMPE
+
+      while read line
+      do
+        for word in $line
+        do
+          echo "$word $url" >> 1.txt
+        done
+      done < $TEMPE
+
+
+
+      cat $TEMPA | sed -n '/^References/,$p'  | sed '1,2d' | while read num next_url
+      do
+         echo $next_url
+      done >> $TEMPD
+
+   done
+
+   # Preparing for the next level
+   cp $TEMPD $TEMPC
+
+   (( number_of_levels = number_of_levels - 1 ))
+   # echo $number_of_levels
+done
+# store
+typeset -A array # this is the only update
+while read key value; do
+    #echo "$key, $value"
+
+    array[$key]="${array[$key]}${array[$key]:+,}$value"
+
+    #echo ${array[$key]}
+done < 1.txt
+# print
+
+for key in "${!array[@]}"; do echo "$key ${array[$key]}"; done
